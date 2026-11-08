@@ -53,8 +53,9 @@ Crear una rama por módulo desde `main`, con los nombres de abajo. Abrir PR temp
 
 - [x] **H2** Documentar cobertura publicada, sandbox, mínimos y requisitos pendientes. [Validación de candidatos](rampas-qa.md#h2--validación-de-los-tramos-fiat)
 - [x] **H4** Demostrar por API un envío con `DEMO_PAYOUT_RESULT=success` y otro con `failed`. El segundo quedó en revisión y el saldo de Martha se mantuvo. [Resultados de la API](rampas-qa.md#h4--resultados-de-la-api-local)
-- [ ] **H9** Ejecutar la demo desde móvil y escritorio. Verificar las etapas, los saldos, la persistencia disponible y la etiqueta de cada tramo.
-- [ ] **H10** Entregar URL de demo, guion de 60–90 segundos y grabación de respaldo. Preparar una remesa nueva para la presentación.
+- [x] **H9 local** Ejecutar la demo simulada desde móvil y escritorio y comprobar etapas, saldos y referencia al recargar. [Resultados](demo-entrega.md#h9--criterios-del-recorrido)
+- [x] **H10 local** Preparar guion de 70 segundos y grabación de respaldo. [Entrega local](demo-entrega.md#h10--guion-de-presentación--70-segundos)
+- [ ] **H10–H12 compartido** Publicar la versión conjunta en el hosting de la demo y repetir el ensayo desde la URL del equipo. [Pendientes](demo-entrega.md#pendientes-para-el-entorno-compartido)
 
 ## Entrega de equipo
 
