@@ -1,5 +1,7 @@
 import type { ProfileId } from "@deone/contracts";
 import express, { type ErrorRequestHandler, type Request } from "express";
+import { authenticate } from "./auth/users.js";
+import { createSession, endSession, SESSION_COOKIE, SESSION_TTL_MS, sessionProfile } from "./auth/sessions.js";
 import { demoRamps } from "./ramps/demo.js";
 import { DemoRemittances, RequestError } from "./remittances/service.js";
 import { simulatedRail } from "./stellar/rail.js";
@@ -22,21 +24,33 @@ app.use("/api", (_req, res, next) => {
 app.use(express.json({ limit: "8kb" }));
 
 function profile(req: Request): ProfileId {
-  return /(?:^|;\s*)deone_demo_profile=martha(?:;|$)/.test(req.headers.cookie ?? "") ? "martha" : "lidia";
+  const id = sessionProfile(req.headers.cookie);
+  if (!id) throw new RequestError(401, "UNAUTHORIZED", "Inicia sesión para continuar.");
+  return id;
 }
 
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", mode: "demo", stellarMode: mode });
 });
 
-app.get("/api/wallet", (req, res) => {
-  res.json(service.wallet(profile(req)));
+app.post("/api/auth/login", (req, res) => {
+  const { username, password } = req.body ?? {};
+  const id = typeof username === "string" && typeof password === "string"
+    ? authenticate(username.trim().toLowerCase(), password)
+    : undefined;
+  if (!id) throw new RequestError(401, "INVALID_CREDENTIALS", "Usuario o contraseña incorrectos.");
+  res
+    .cookie(SESSION_COOKIE, createSession(id), { httpOnly: true, sameSite: "lax", path: "/", maxAge: SESSION_TTL_MS })
+    .json(service.wallet(id));
 });
 
-app.post("/api/demo/profile", (req, res) => {
-  const id = req.body?.id;
-  if (id !== "lidia" && id !== "martha") throw new RequestError(400, "INVALID_PROFILE", "Perfil de demo inválido.");
-  res.cookie("deone_demo_profile", id, { httpOnly: true, sameSite: "lax" }).json(service.wallet(id));
+app.post("/api/auth/logout", (req, res) => {
+  endSession(req.headers.cookie);
+  res.clearCookie(SESSION_COOKIE, { path: "/" }).json({});
+});
+
+app.get("/api/wallet", (req, res) => {
+  res.json(service.wallet(profile(req)));
 });
 
 app.post("/api/quotes", (req, res) => {

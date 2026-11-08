@@ -21,7 +21,7 @@ Abrir la [wallet local](http://localhost:3000). La web redirige `/api/*` al back
 | [Tablero de módulos](docs/modulos.md) | Dueños, archivos, tareas, entregas y criterios de aceptación para los cinco roles. |
 | [Guía visual](docs/estilos.md) | Paleta, tipografía, componentes y revisión en móvil y escritorio. |
 
-La base funciona con **fiat y Stellar simulados** al arrancar. Comparte dos perfiles ficticios entre quienes abran la misma instancia y reinicia sus datos al detener el backend. El adaptador Testnet está disponible por configuración. El siguiente hito del backend es persistir la remesa y la cola en PostgreSQL.
+La base funciona con **fiat y Stellar simulados** al arrancar. Inicia sesión con `user1` / `user1pass` (Lidia, BOB) o `user2` / `user2pass` (Martha, COP). Las sesiones y los datos de demo se reinician al detener el backend. El adaptador Testnet está disponible por configuración. El siguiente hito del backend es persistir la remesa y la cola en PostgreSQL.
 
 `npm run dev:frontend` y `npm run dev:backend` levantan cada servicio por separado. `npm run check` verifica tipos, `npm test` ejecuta las pruebas del backend y `npm run build` compila ambos servicios. Para ejecutar la compilación, usar `npm run start -w @deone/backend` y `npm run start -w @deone/frontend` en dos terminales.
 

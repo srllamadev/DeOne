@@ -1,5 +1,5 @@
-import { ProfilePicker } from "../../src/wallet/profile-picker";
+import { AccountPanel } from "../../src/auth/account-panel";
 
 export default function MorePage() {
-  return <ProfilePicker />;
+  return <AccountPanel />;
 }

@@ -1,4 +1,4 @@
-import type { ApiError, ProfileId, Quote, QuoteRequest, Remittance, Wallet } from "@deone/contracts";
+import type { ApiError, Quote, QuoteRequest, Remittance, Wallet } from "@deone/contracts";
 
 export class ApiRequestError extends Error {
   constructor(message: string, readonly status: number, readonly code?: string) {
@@ -25,7 +25,8 @@ function post<T>(path: string, body: unknown, headers?: Record<string, string>) 
 
 export const api = {
   wallet: () => request<Wallet>("/wallet"),
-  selectProfile: (id: ProfileId) => post<Wallet>("/demo/profile", { id }),
+  login: (input: { username: string; password: string }) => post<Wallet>("/auth/login", input),
+  logout: () => post<Record<string, never>>("/auth/logout", {}),
   quote: (input: QuoteRequest) => post<Quote>("/quotes", input),
   confirm: (quoteId: string) => post<Remittance>("/remittances", { quoteId }, { "Idempotency-Key": quoteId }),
   remittance: (id: string) => request<Remittance>(`/remittances/${encodeURIComponent(id)}`),
