@@ -38,10 +38,16 @@ export function Dashboard() {
   async function copy(value: string, label: string) {
     try {
       await navigator.clipboard.writeText(value);
-      setCopyStatus(`${label} copiado`);
+      setCopyStatus(` ✓ ${label} copiado`);
     } catch {
       setCopyStatus(`Copia manualmente ${value}`);
     }
+    setTimeout(() => setCopyStatus(""), 3000);
+  }
+
+  function showComingSoon(feature: string) {
+    setCopyStatus(`${feature}: Próximamente disponible`);
+    setTimeout(() => setCopyStatus(""), 3000);
   }
 
   if (error) return <p role="alert" className="debit">{error}</p>;
@@ -71,7 +77,7 @@ export function Dashboard() {
       </header>
       <div className="meta-strip">
         <span className="demo-badge">Modo demo</span>
-        <span className="copy-feedback" role="status">{copyStatus}</span>
+        {copyStatus && <span className="copy-feedback active-toast" role="status">{copyStatus}</span>}
       </div>
 
       <section className="balance-card" aria-labelledby="balance-title">
@@ -85,15 +91,17 @@ export function Dashboard() {
       </section>
 
       <div className="wallet-actions" aria-label="Acciones de la wallet">
-        <button type="button" className="wallet-action" onClick={() => void copy(profile.alias, profile.alias)}>
+        <button type="button" className="wallet-action" onClick={() => void copy(profile.alias, `Alias (${profile.alias})`)}>
+
           <QrCode aria-hidden /><span>Cobro</span>
         </button>
         <Link href="/pago" className="wallet-action">
           <ScanLine aria-hidden /><span>Pago</span>
         </Link>
-        <button type="button" className="wallet-action" disabled>
+        <button type="button" className="wallet-action is-soon" aria-disabled="true" onClick={() => showComingSoon("Retiro")}>
           <WalletIcon aria-hidden /><span>Retiro</span><small>Próximamente</small>
         </button>
+
       </div>
 
       <section aria-labelledby="movements-title">
