@@ -1,0 +1,22 @@
+{
+  "name": "@deone/backend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env --watch --import tsx src/index.ts",
+    "build": "tsc",
+    "check": "tsc --noEmit",
+    "start": "node --env-file-if-exists=.env dist/index.js",
+    "test": "node --import tsx --test src/remittances/service.test.ts"
+  },
+  "dependencies": {
+    "@deone/contracts": "0.1.0",
+    "@stellar/stellar-sdk": "^14.0.0",
+    "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.21.0"
+  }
+}

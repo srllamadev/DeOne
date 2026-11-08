@@ -2,6 +2,45 @@
 
 Wallet web de remesas Bolivia → Colombia. Plan de hackathon para cinco desarrolladores en 12 horas.
 
+## Arranque del monorepo
+
+Requiere Node.js **22.14 o superior** y npm. Desde la raíz, en Windows:
+
+```powershell
+npm.cmd ci
+npm.cmd run dev
+```
+
+Abrir la [wallet local](http://localhost:3000). La web redirige `/api/*` al backend local en el puerto 4000. El [endpoint de salud](http://localhost:3000/api/health) muestra el modo Stellar. En macOS o Linux, usar `npm` en lugar de `npm.cmd`.
+
+| Ruta | Contenido |
+| --- | --- |
+| [`apps/frontend`](apps/frontend) | Next.js con App Router, dashboard, formulario de remesa y seguimiento. CSS con tokens compartidos y Roboto Condensed servido desde la aplicación. |
+| [`apps/backend`](apps/backend) | API Express en TypeScript, wallets de demo, orquestación de remesas, rampas simuladas y adaptadores Stellar. |
+| [`packages/contracts`](packages/contracts/src/index.ts) | Tipos de perfiles, saldos, cotizaciones, errores y remesas que comparten ambos workspaces. |
+| [Tablero de módulos](docs/modulos.md) | Dueños, archivos, tareas, entregas y criterios de aceptación para los cinco roles. |
+| [Guía visual](docs/estilos.md) | Paleta, tipografía, componentes y revisión en móvil y escritorio. |
+
+La base funciona con **fiat y Stellar simulados** al arrancar. Comparte dos perfiles ficticios entre quienes abran la misma instancia y reinicia sus datos al detener el backend. El adaptador Testnet está disponible por configuración. El siguiente hito del backend es persistir la remesa y la cola en PostgreSQL.
+
+`npm run dev:frontend` y `npm run dev:backend` levantan cada servicio por separado. `npm run check` verifica tipos, `npm test` ejecuta las pruebas del backend y `npm run build` compila ambos servicios. Para ejecutar la compilación, usar `npm run start -w @deone/backend` y `npm run start -w @deone/frontend` en dos terminales.
+
+### Variables de entorno
+
+El modo simulado arranca sin `.env`. Para activar Testnet, copiar [la plantilla del backend](apps/backend/.env.example) a `apps/backend/.env` y completar solo las credenciales de prueba.
+
+| Variable | Valor esperado |
+| --- | --- |
+| `STELLAR_MODE` | `simulated` por defecto. Usar `testnet` para ejecutar el pago de prueba en Stellar. |
+| `STELLAR_SOURCE_SECRET` | Semilla privada de la cuenta de liquidación de **Testnet**, con XLM y USDC de prueba. Guardarla directamente en el `.env` local o en el gestor de secretos del equipo. |
+| `STELLAR_DESTINATION_ADDRESS` | Dirección pública de la cuenta receptora de Testnet, activa y con trustline al mismo emisor. |
+| `STELLAR_USDC_ISSUER` | Dirección pública del emisor USDC en Stellar Testnet. [Circle](https://www.circle.com/multi-chain-usdc/stellar) |
+| `DEMO_PAYOUT_RESULT` | `success` por defecto. Cambiar a `failed` para probar revisión y ausencia de abono. |
+| `PORT` y `HOST` | `4000` y `127.0.0.1` por defecto. Ajustar para el entorno de ejecución. |
+| `BACKEND_URL` | Solo si cambia la URL de la API. Copiar [la plantilla del frontend](apps/frontend/.env.local.example) a `apps/frontend/.env.local` antes de arrancar o compilar la web. |
+
+Hacer commit de las plantillas y de `package-lock.json`. Las variables reales, dependencias instaladas, compilaciones y reportes de pruebas quedan ignorados por Git.
+
 ## Decisión técnica
 
 **Construir una remesa de extremo a extremo con USDC en Stellar Testnet y ambos tramos fiat simulados.** Lidia confirma un envío en BOB y Martha ve el abono de prueba en COP. El comprobante enlaza al pago en Testnet y separa esa confirmación del abono simulado. Para la demo, usar dos perfiles precargados y un único corredor BOB → COP.
@@ -20,11 +59,11 @@ Para mover dinero real, hacen falta un proveedor que cobre BOB y entregue USDC e
 
 ## Arquitectura del MVP
 
-Un repositorio en TypeScript. **Next.js** con App Router, Tailwind y Route Handlers para la web y la API, **PostgreSQL** para el estado y una tabla de trabajos, y **un worker Node.js** del mismo repo. El worker consume trabajos persistidos y llama a `PayInProvider`, `StellarRail` y `PayOutProvider`. Para el hackathon, desplegar la web y ejecutar el worker como proceso persistente. La demo usa una sesión de prueba con cookie y dos perfiles ficticios. Las rutas resuelven la cuenta activa del lado servidor.
+Un repositorio en TypeScript con **Next.js** y CSS con tokens para la web, **Express** para la API y un paquete de contratos compartidos. La arquitectura objetivo usa **PostgreSQL** para el estado y una tabla de trabajos, y un **worker Node.js** que consume los trabajos y llama a `PayInProvider`, `StellarRail` y `PayOutProvider`. En la base actual el proceso de la API ejecuta una cola en memoria. La demo selecciona entre dos perfiles ficticios mediante una cookie.
 
 ```mermaid
 flowchart LR
-    A[Lidia y Martha · Web] --> B[API Next.js]
+    A[Lidia y Martha · Next.js] --> B[API Express]
     B --> C[(PostgreSQL)]
     C <--> D[Worker de remesas]
     D --> E[Cobro BOB simulado]
@@ -44,10 +83,10 @@ flowchart LR
 | Operación | Contrato |
 | --- | --- |
 | `GET /api/wallet` | Devuelve perfil activo, moneda, saldo disponible de demo y últimos movimientos. |
-| `POST /api/quotes` | Recibe `recipientAlias` y `sendAmountMinor`. Devuelve `quoteId`, monto total BOB, comisión incluida, COP netos, `expiresAt` y `mode`. |
-| `POST /api/remittances` | Recibe `quoteId` y cabecera `Idempotency-Key`. Devuelve `remittanceId` y `status`. Repetir la misma solicitud devuelve la remesa existente. Cada cotización se consume una vez. |
+| `POST /api/quotes` | Recibe `recipientAlias` y `sendAmountMinor`. Devuelve la cotización con `id`, monto total BOB, comisión incluida, COP netos, `expiresAt` y `mode`. |
+| `POST /api/remittances` | Recibe `quoteId` y cabecera `Idempotency-Key`. Devuelve la remesa con `id` y `status`. Repetir la misma solicitud devuelve la remesa existente. Cada cotización se consume una vez. |
 | `GET /api/remittances/:id` | Devuelve estado, montos, etapas y `txHash` si existe. La UI consulta cada 2–3 segundos durante el envío y actualiza la wallet al completarse. |
-| `POST /api/demo/profile` | Cambia entre los dos perfiles ficticios de la sesión de demo. El servidor verifica que el modo demo esté activo. |
+| `POST /api/demo/profile` | Recibe `{ id: "lidia" }` o `{ id: "martha" }`, guarda el perfil activo en la cookie de demo y devuelve su wallet. |
 
 **Estados** `AWAITING_PAYIN → PAYIN_CONFIRMED → STELLAR_PENDING → STELLAR_CONFIRMED → PAYOUT_PENDING → COMPLETED`. Agregar `FAILED` para fallos definitivos sin fondos pendientes y `REVIEW_REQUIRED` si hay fondos en tránsito o resultado incierto. Una cotización vencida se rechaza antes de reservar saldo. `COMPLETED` requiere confirmación del adaptador de desembolso, incluso si el hash ya existe.
 
@@ -55,7 +94,7 @@ flowchart LR
 
 **Reintentos** Usar restricciones únicas para cotización consumida, clave de idempotencia por ordenante y movimiento por remesa y tipo. Reservar o acreditar saldo bajo transacción. El worker procesa un pago Stellar a la vez desde la cuenta de prueba. Persistir el XDR firmado con vencimiento y el hash antes de enviar. Si la respuesta es incierta, consultar el hash y reenviar el mismo XDR mientras sea válido. Si persiste la incertidumbre, enviar a revisión. Liberar una reserva si falla el cobro antes del débito. En el piloto, verificar firmas de webhooks y conciliar por identificador antes de reintentar un pago externo.
 
-**Entornos** `DEMO_MODE=1`, red Testnet y claves de prueba solo en variables de servidor. Cuentas, QR, beneficiarias y datos de identidad ficticios. Si se prueba VANK, confirmar que su sandbox acepta el emisor configurado y usar la cuenta y el memo que devuelva el anchor para esa orden. [Datos de sandbox de VANK](https://vank.co/en/anchor-stellar)
+**Entornos** Fiat simulado en ambos modos. `STELLAR_MODE=testnet` activa el pago en la red de pruebas y lee claves solo del servidor. Si se prueba VANK por separado, confirmar que su sandbox acepta el emisor configurado y usar la cuenta y el memo que devuelva el anchor para esa orden. [Datos de sandbox de VANK](https://vank.co/en/anchor-stellar)
 
 ## UI web basada en las capturas
 
@@ -75,11 +114,11 @@ Pantallas imprescindibles `Inicio → Pago → Revisar cotización → Seguimien
 
 | Responsable | Módulo y propiedad | Entrega comprobable |
 | --- | --- | --- |
-| **Dev 1 · UI wallet** | `components/wallet` e inicio. Tokens de color, saldo, perfiles, botones, historial, diseño responsive y etiqueta de demo. | A la H4 se ven Lidia y Martha con datos de prueba. A la H8 las vistas leen la API y muestran el abono. |
-| **Dev 2 · UI remesa** | `app/pago` y detalle. Alias, monto, cotización, confirmación, seguimiento, errores y comprobante. | A la H4 puede recorrer el flujo con fixtures. A la H8 puede usar la API y abrir el enlace al hash. |
-| **Dev 3 · Backend y datos** | `app/api`, `server/remittances` y migraciones. Sesión demo, contrato, cotización, saldo, estados y worker. | A la H4 crea una remesa persistente. A la H7 procesa los tres adaptadores y una confirmación repetida produce un solo movimiento. |
-| **Dev 4 · Stellar** | `server/stellar`. Cuentas Testnet, trustlines, faucet, `Payment`, persistencia del XDR y consulta del hash junto con Dev 3. | A la H3 obtiene el primer hash de prueba. A la H7 el worker recupera una confirmación pendiente usando el hash. |
-| **Dev 5 · Rampas, integración y demo** | `server/ramps`, datos semilla y despliegue. Implementa cobro y abono simulados, verifica accesos y mínimos de alyto/VANK y coordina QA. | A la H4 entrega adaptadores con éxito y fallo controlado. A la H10 deja un enlace de demo, un guion y una grabación de respaldo. |
+| **Dev 1 · UI wallet** | `apps/frontend/src/wallet` y `src/styles` del frontend. Tokens, saldo, perfiles, botones, historial y responsive. | A la H4 valida ambas vistas. A la H8 demuestra el abono actualizado. |
+| **Dev 2 · UI remesa** | `apps/frontend/src/remittances` y rutas de pago y remesas. Alias, monto, cotización, seguimiento, errores y comprobante. | A la H4 valida el flujo simulado. A la H8 demuestra el enlace al hash cuando Testnet está configurada. |
+| **Dev 3 · Backend y datos** | `apps/backend/src/index.ts`, `src/remittances` y contratos. PostgreSQL, idempotencia, saldo y worker durable. | A la H4 crea una remesa persistente. A la H7 puede reiniciar el proceso y consultar el envío sin duplicar el movimiento. |
+| **Dev 4 · Stellar** | `apps/backend/src/stellar`. Cuentas Testnet, trustlines, fondeo y conciliación por hash con Dev 3. | A la H3 obtiene el primer hash. A la H7 valida la recuperación de una confirmación pendiente. |
+| **Dev 5 · Rampas, integración y demo** | `apps/backend/src/ramps`, datos semilla, despliegue y QA. Verifica accesos y mínimos con alyto/VANK. | A la H4 valida éxito y fallo de desembolso. A la H10 deja un enlace de demo, un guion y una grabación de respaldo. |
 
 ### Reloj de trabajo
 
