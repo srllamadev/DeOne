@@ -51,8 +51,8 @@ Crear una rama por módulo desde `main`, con los nombres de abajo. Abrir PR temp
 
 **Base incluida** Adaptadores de entrada y salida simulados, perfiles de prueba y opción para forzar fallo de abono.
 
-- [ ] **H2** Anotar medio de cobro BOB, soporte de USDC en Stellar, sandbox y mínimos de cada proveedor. Mantener los adaptadores simulados como ruta de demo.
-- [ ] **H4** Demostrar un envío con `DEMO_PAYOUT_RESULT=success` y otro con `failed`. El segundo queda en revisión y el saldo de Martha no cambia.
+- [x] **H2** Documentar cobertura publicada, sandbox, mínimos y requisitos pendientes. [Validación de candidatos](rampas-qa.md#h2--validación-de-los-tramos-fiat)
+- [x] **H4** Demostrar por API un envío con `DEMO_PAYOUT_RESULT=success` y otro con `failed`. El segundo quedó en revisión y el saldo de Martha se mantuvo. [Resultados de la API](rampas-qa.md#h4--resultados-de-la-api-local)
 - [ ] **H9** Ejecutar la demo desde móvil y escritorio. Verificar las etapas, los saldos, la persistencia disponible y la etiqueta de cada tramo.
 - [ ] **H10** Entregar URL de demo, guion de 60–90 segundos y grabación de respaldo. Preparar una remesa nueva para la presentación.
 
