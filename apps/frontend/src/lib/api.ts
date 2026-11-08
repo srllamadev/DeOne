@@ -1,10 +1,16 @@
 import type { ApiError, ProfileId, Quote, QuoteRequest, Remittance, Wallet } from "@deone/contracts";
 
+export class ApiRequestError extends Error {
+  constructor(message: string, readonly status: number, readonly code?: string) {
+    super(message);
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api${path}`, { ...init, cache: "no-store" });
   if (!response.ok) {
     const error: Partial<ApiError> = await response.json().catch(() => ({}));
-    throw new Error(error.message ?? "No pudimos conectar con DeOne.");
+    throw new ApiRequestError(error.message ?? "No pudimos conectar con DeOne.", response.status, error.code);
   }
   return response.json() as Promise<T>;
 }
