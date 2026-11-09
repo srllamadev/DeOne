@@ -30,6 +30,7 @@ export interface QuoteRequest {
 
 export interface Quote {
   id: string;
+  sender: Profile;
   recipient: Profile;
   sendAmountMinor: number;
   feeMinor: number;
@@ -53,11 +54,28 @@ export interface Remittance {
   quote: Quote;
   status: RemittanceStatus;
   stellarMode: "simulated" | "testnet";
+  /** Pago del emisor a la tesorería (tramo de cobro). */
   txHash?: string;
+  /** Pago de la tesorería al destinatario (tramo de abono). */
+  payoutTxHash?: string;
   createdAt: string;
 }
 
 export interface ApiError {
   code: string;
   message: string;
+}
+
+export interface StellarBalance {
+  asset: string;
+  issuer?: string;
+  balance: string;
+}
+
+export interface StellarWallet {
+  profile: ProfileId;
+  address?: string;
+  exists: boolean;
+  balances: StellarBalance[];
+  network: "testnet";
 }

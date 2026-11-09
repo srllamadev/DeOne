@@ -32,10 +32,10 @@ El modo simulado arranca sin `.env`. Para activar Testnet, copiar [la plantilla 
 
 | Variable | Valor esperado |
 | --- | --- |
-| `STELLAR_MODE` | `simulated` por defecto. Usar `testnet` para ejecutar el pago de prueba en Stellar. |
-| `STELLAR_SOURCE_SECRET` | Semilla privada de la cuenta de liquidación de **Testnet**, con XLM y USDC de prueba. Guardarla directamente en el `.env` local o en el gestor de secretos del equipo. |
-| `STELLAR_DESTINATION_ADDRESS` | Dirección pública de la cuenta receptora de Testnet, activa y con trustline al mismo emisor. |
-| `STELLAR_USDC_ISSUER` | Dirección pública del emisor USDC en Stellar Testnet. [Circle](https://www.circle.com/multi-chain-usdc/stellar) |
+| `STELLAR_MODE` | `simulated` por defecto. Usar `testnet` para mover los activos de prueba BOBT y COPT en Stellar Testnet. |
+| `WALLET_USER1_SECRET` · `WALLET_USER2_SECRET` | Semillas de las wallets de Lidia (BOB) y Martha (COP) en Testnet. Las genera `npm run setup:assets`. |
+| `STELLAR_ASSET_ISSUER_SECRET` | Emisor de `BOBT` y `COPT`. Solo para emitir saldo de prueba. |
+| `STELLAR_TREASURY_SECRET` | Tesorería: recibe el cobro en la moneda de origen y paga la moneda de destino. |
 | `DEMO_PAYOUT_RESULT` | `success` por defecto. Cambiar a `failed` para probar revisión y ausencia de abono. |
 | `PORT` y `HOST` | `4000` y `127.0.0.1` por defecto. Ajustar para el entorno de ejecución. |
 | `BACKEND_URL` | Solo si cambia la URL de la API. Copiar [la plantilla del frontend](apps/frontend/.env.local.example) a `apps/frontend/.env.local` antes de arrancar o compilar la web. |

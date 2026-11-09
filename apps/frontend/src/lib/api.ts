@@ -1,4 +1,4 @@
-import type { ApiError, Quote, QuoteRequest, Remittance, Wallet } from "@deone/contracts";
+import type { ApiError, Quote, QuoteRequest, Remittance, StellarWallet, Wallet } from "@deone/contracts";
 
 export class ApiRequestError extends Error {
   constructor(message: string, readonly status: number, readonly code?: string) {
@@ -25,6 +25,7 @@ function post<T>(path: string, body: unknown, headers?: Record<string, string>) 
 
 export const api = {
   wallet: () => request<Wallet>("/wallet"),
+  stellarWallet: () => request<StellarWallet>("/stellar/wallet"),
   login: (input: { username: string; password: string }) => post<Wallet>("/auth/login", input),
   logout: () => post<Record<string, never>>("/auth/logout", {}),
   quote: (input: QuoteRequest) => post<Quote>("/quotes", input),

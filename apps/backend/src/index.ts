@@ -5,7 +5,8 @@ import { createSession, endSession, SESSION_COOKIE, SESSION_TTL_MS, sessionProfi
 import { demoRamps } from "./ramps/demo.js";
 import { DemoRemittances, RequestError } from "./remittances/service.js";
 import { simulatedRail } from "./stellar/rail.js";
-import { createTestnetRail } from "./stellar/testnet.js";
+import { createOwnAssetRail } from "./stellar/testnet.js";
+import { stellarWallet } from "./stellar/wallet-state.js";
 
 const mode = process.env.STELLAR_MODE ?? "simulated";
 if (mode !== "simulated" && mode !== "testnet") throw new Error("STELLAR_MODE debe ser simulated o testnet");
@@ -13,7 +14,7 @@ const payoutResult = process.env.DEMO_PAYOUT_RESULT ?? "success";
 if (payoutResult !== "success" && payoutResult !== "failed") throw new Error("DEMO_PAYOUT_RESULT debe ser success o failed");
 
 const { payIn, payOut } = demoRamps(payoutResult);
-const service = new DemoRemittances(payIn, mode === "testnet" ? createTestnetRail(process.env) : simulatedRail, payOut);
+const service = new DemoRemittances(payIn, mode === "testnet" ? createOwnAssetRail(process.env) : simulatedRail, payOut);
 
 const app = express();
 app.disable("x-powered-by");
@@ -51,6 +52,14 @@ app.post("/api/auth/logout", (req, res) => {
 
 app.get("/api/wallet", (req, res) => {
   res.json(service.wallet(profile(req)));
+});
+
+app.get("/api/stellar/wallet", async (req, res, next) => {
+  try {
+    res.json(await stellarWallet(profile(req)));
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.post("/api/quotes", (req, res) => {

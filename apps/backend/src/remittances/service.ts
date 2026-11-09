@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { ProfileId, Quote, QuoteRequest, Remittance, Wallet, WalletEntry } from "@deone/contracts";
 import type { PayInProvider, PayOutProvider } from "../ramps/demo.js";
-import type { StellarRail } from "../stellar/rail.js";
+import type { SettlementLeg, StellarRail } from "../stellar/rail.js";
 import { openingBalances, openingEntries, profiles } from "../wallet/profiles.js";
+import { minorToToken, route, RouteError } from "./rates.js";
 
 export class RequestError extends Error {
   constructor(readonly status: number, readonly code: string, message: string) {
@@ -10,9 +11,14 @@ export class RequestError extends Error {
   }
 }
 
+const PROFILE_IDS = Object.keys(profiles) as ProfileId[];
+
 export class DemoRemittances {
-  private readonly balances = { ...openingBalances };
-  private readonly entries = { lidia: openingEntries("lidia"), martha: openingEntries("martha") };
+  private readonly balances: Record<ProfileId, number> = { ...openingBalances };
+  private readonly entries: Record<ProfileId, WalletEntry[]> = {
+    lidia: openingEntries("lidia"),
+    martha: openingEntries("martha"),
+  };
   private readonly quotes = new Map<string, Quote>();
   private readonly usedQuotes = new Set<string>();
   private readonly remittances = new Map<string, Remittance>();
@@ -30,20 +36,26 @@ export class DemoRemittances {
   }
 
   quote(profile: ProfileId, input: QuoteRequest): Quote {
-    if (profile !== "lidia" || input.recipientAlias !== profiles.martha.alias) {
-      throw new RequestError(422, "UNSUPPORTED_ROUTE", "En la demo, Lidia envía a @martha.");
+    const recipient = PROFILE_IDS
+      .map((id) => profiles[id])
+      .find((candidate) => candidate.id !== profile && candidate.alias === input.recipientAlias);
+    if (!recipient) throw new RequestError(422, "UNSUPPORTED_ROUTE", "No encontramos ese alias como destinatario.");
+
+    let result;
+    try {
+      result = route(profiles[profile], recipient, input.sendAmountMinor);
+    } catch (error) {
+      if (error instanceof RouteError) throw new RequestError(error.status, error.code, error.message);
+      throw error;
     }
-    const amount = input.sendAmountMinor;
-    if (!Number.isSafeInteger(amount) || amount < 100 || amount > 10_000) {
-      throw new RequestError(422, "INVALID_AMOUNT", "Ingresa un monto entre Bs 1,00 y Bs 100,00.");
-    }
-    const feeMinor = 50;
+
     const quote: Quote = {
       id: randomUUID(),
-      recipient: profiles.martha,
-      sendAmountMinor: amount,
-      feeMinor,
-      receiveAmountMinor: Math.floor((amount - feeMinor) * 4_500 / 950) * 100,
+      sender: profiles[profile],
+      recipient,
+      sendAmountMinor: input.sendAmountMinor,
+      feeMinor: result.feeMinor,
+      receiveAmountMinor: result.receiveAmountMinor,
       expiresAt: new Date(Date.now() + 120_000).toISOString(),
       mode: "demo",
     };
@@ -52,22 +64,22 @@ export class DemoRemittances {
   }
 
   send(profile: ProfileId, quoteId: string, key: string): Remittance {
-    if (profile !== "lidia") throw new RequestError(403, "SENDER_REQUIRED", "Cambia al perfil de Lidia para enviar.");
-
     const previous = this.idempotency.get(key);
     if (previous) {
-      if (previous.quote.id !== quoteId) {
-        throw new RequestError(409, "KEY_REUSED", "La clave ya pertenece a otra cotización.");
-      }
+      if (previous.quote.sender.id !== profile) throw new RequestError(403, "SENDER_REQUIRED", "Esta remesa pertenece a otro usuario.");
+      if (previous.quote.id !== quoteId) throw new RequestError(409, "KEY_REUSED", "La clave ya pertenece a otra cotización.");
       return previous;
     }
 
     const quote = this.quotes.get(quoteId);
+    if (quote && quote.sender.id !== profile) {
+      throw new RequestError(403, "SENDER_REQUIRED", "Esta cotización pertenece a otro usuario.");
+    }
     if (!quote || Date.parse(quote.expiresAt) <= Date.now()) {
       throw new RequestError(409, "QUOTE_EXPIRED", "La cotización venció. Vuelve a cotizar.");
     }
     if (this.usedQuotes.has(quoteId)) throw new RequestError(409, "QUOTE_USED", "La cotización ya fue utilizada.");
-    if (this.balances.lidia < quote.sendAmountMinor) {
+    if (this.balances[profile] < quote.sendAmountMinor) {
       throw new RequestError(409, "INSUFFICIENT_BALANCE", "Saldo disponible insuficiente.");
     }
 
@@ -79,7 +91,7 @@ export class DemoRemittances {
       createdAt: new Date().toISOString(),
     };
 
-    this.balances.lidia -= quote.sendAmountMinor;
+    this.balances[profile] -= quote.sendAmountMinor;
     this.usedQuotes.add(quoteId);
     this.idempotency.set(key, remittance);
     this.remittances.set(remittance.id, remittance);
@@ -95,30 +107,45 @@ export class DemoRemittances {
 
   private async process(remittance: Remittance) {
     const { quote } = remittance;
+    const sender = quote.sender.id;
+    const recipient = quote.recipient.id;
     try {
       await this.payIn.collect(remittance);
     } catch {
-      this.balances.lidia += quote.sendAmountMinor;
+      this.balances[sender] += quote.sendAmountMinor;
       remittance.status = "FAILED";
       return;
     }
 
     remittance.status = "PAYIN_CONFIRMED";
-    this.addEntry("lidia", "Remesa enviada", -quote.sendAmountMinor, remittance.id);
+    this.addEntry(sender, "Remesa enviada", -quote.sendAmountMinor, remittance.id);
 
     try {
       remittance.status = "STELLAR_PENDING";
-      const amount = ((quote.sendAmountMinor - quote.feeMinor) * 1.2 / 950).toFixed(7);
-      await this.stellar.settle(amount, (hash) => { remittance.txHash = hash; });
+      const result = await this.stellar.settle(this.legOf(quote), {
+        onCollected: (hash) => { remittance.txHash = hash; },
+      });
+      remittance.payoutTxHash = result.payoutHash;
       remittance.status = "STELLAR_CONFIRMED";
       remittance.status = "PAYOUT_PENDING";
       await this.payOut.disburse(remittance);
-      this.balances.martha += quote.receiveAmountMinor;
-      this.addEntry("martha", "Remesa recibida", quote.receiveAmountMinor, remittance.id);
+      this.balances[recipient] += quote.receiveAmountMinor;
+      this.addEntry(recipient, "Remesa recibida", quote.receiveAmountMinor, remittance.id);
       remittance.status = "COMPLETED";
     } catch {
       remittance.status = "REVIEW_REQUIRED";
     }
+  }
+
+  private legOf(quote: Quote): SettlementLeg {
+    return {
+      sender: quote.sender.id,
+      recipient: quote.recipient.id,
+      sendCurrency: quote.sender.currency,
+      sendAmount: minorToToken(quote.sendAmountMinor),
+      receiveCurrency: quote.recipient.currency,
+      receiveAmount: minorToToken(quote.receiveAmountMinor),
+    };
   }
 
   private addEntry(profile: ProfileId, label: string, amountMinor: number, remittanceId: string) {
@@ -132,3 +159,4 @@ export class DemoRemittances {
     this.entries[profile].unshift(entry);
   }
 }
+

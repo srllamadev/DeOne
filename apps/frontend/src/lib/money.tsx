@@ -1,5 +1,10 @@
 import type { Currency } from "@deone/contracts";
 
+export const COUNTRY: Record<Currency, { name: string; flag: string }> = {
+  BOB: { name: "Bolivia", flag: "flag-bo" },
+  COP: { name: "Colombia", flag: "flag-co" },
+};
+
 const bob = new Intl.NumberFormat("es-BO", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const cop = new Intl.NumberFormat("es-CO", { maximumFractionDigits: 0 });
 

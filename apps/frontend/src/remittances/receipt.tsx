@@ -5,7 +5,7 @@ import { Check, CircleAlert, Clock3, ExternalLink, List, Wallet } from "lucide-r
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
-import { Money } from "../lib/money";
+import { COUNTRY, Money } from "../lib/money";
 import { RemittanceHeader } from "./remittance-header";
 import styles from "./remittance.module.css";
 
@@ -23,9 +23,9 @@ const tracking: Record<RemittanceStatus, { title: string; stage: number }> = {
 function Timeline({ remittance }: { remittance: Remittance }) {
   const { stage } = tracking[remittance.status];
   const stages = [
-    { title: "Cobro en Bolivia", description: "Fiat simulado · BOB" },
+    { title: `Cobro en ${COUNTRY[remittance.quote.sender.currency].name}`, description: `Fiat simulado · ${remittance.quote.sender.currency}` },
     { title: "Transferencia por Stellar", description: remittance.stellarMode === "testnet" ? "Stellar Testnet" : "Stellar simulado" },
-    { title: "Abono en Colombia", description: "Fiat simulado · COP" },
+    { title: `Abono en ${COUNTRY[remittance.quote.recipient.currency].name}`, description: `Fiat simulado · ${remittance.quote.recipient.currency}` },
   ];
 
   return (
@@ -85,7 +85,7 @@ export function Receipt({ id }: { id: string }) {
 
   return (
     <div className={styles.screen}>
-      <RemittanceHeader title={completed ? "Comprobante" : "Seguimiento"} subtitle="Remesa de Bolivia a Colombia" />
+      <RemittanceHeader title={completed ? "Comprobante" : "Seguimiento"} subtitle={`Remesa de ${COUNTRY[remittance?.quote.sender.currency ?? "BOB"].name} a ${COUNTRY[remittance?.quote.recipient.currency ?? "COP"].name}`} />
       {error && (
         <div className="panel stack">
           <p role="alert" className={styles.feedback}>{error}</p>
@@ -103,20 +103,20 @@ export function Receipt({ id }: { id: string }) {
               <div>
                 <h2 id="status-title">{tracking[remittance.status].title}</h2>
                 <p className="muted">
-                  {completed ? "Se confirmó el abono de prueba en Colombia."
+                  {completed ? `Se confirmó el abono de prueba en ${COUNTRY[remittance.quote.recipient.currency].name}.`
                     : failed ? "El cobro falló y el saldo reservado quedó disponible."
-                    : review ? "El abono en Colombia sigue sin confirmar. Conserva la referencia para consultar el envío."
+                    : review ? `El abono en ${COUNTRY[remittance.quote.recipient.currency].name} sigue sin confirmar. Conserva la referencia para consultar el envío.`
                     : "El estado se actualiza automáticamente."}
                 </p>
               </div>
             </div>
             <div className={styles.total}>
               <p className="muted">{completed ? "Abono simulado" : "Abono previsto"} · {remittance.quote.recipient.name}</p>
-              <p className={`${styles.totalAmount} ${completed ? "credit" : ""}`}><Money currency="COP" minor={remittance.quote.receiveAmountMinor} /></p>
+              <p className={`${styles.totalAmount} ${completed ? "credit" : ""}`}><Money currency={remittance.quote.recipient.currency} minor={remittance.quote.receiveAmountMinor} /></p>
             </div>
             <dl className={styles.details}>
-              <div><dt>Monto de origen</dt><dd><Money currency="BOB" minor={remittance.quote.sendAmountMinor} /></dd></div>
-              <div><dt>Comisión incluida</dt><dd><Money currency="BOB" minor={remittance.quote.feeMinor} /></dd></div>
+              <div><dt>Monto de origen</dt><dd><Money currency={remittance.quote.sender.currency} minor={remittance.quote.sendAmountMinor} /></dd></div>
+              <div><dt>Comisión incluida</dt><dd><Money currency={remittance.quote.sender.currency} minor={remittance.quote.feeMinor} /></dd></div>
             </dl>
           </section>
 
@@ -125,7 +125,12 @@ export function Receipt({ id }: { id: string }) {
             <Timeline remittance={remittance} />
             {remittance.stellarMode === "testnet" && remittance.txHash && (
               <a className={`text-link ${styles.explorer}`} href={`https://stellar.expert/explorer/testnet/tx/${encodeURIComponent(remittance.txHash)}`} target="_blank" rel="noreferrer">
-                Ver transacción en Stellar Testnet <ExternalLink size={17} aria-hidden />
+                Ver transacción de cobro en Stellar Testnet <ExternalLink size={17} aria-hidden />
+              </a>
+            )}
+            {remittance.stellarMode === "testnet" && remittance.payoutTxHash && (
+              <a className={`text-link ${styles.explorer}`} href={`https://stellar.expert/explorer/testnet/tx/${encodeURIComponent(remittance.payoutTxHash)}`} target="_blank" rel="noreferrer">
+                Ver transacción de abono en Stellar Testnet <ExternalLink size={17} aria-hidden />
               </a>
             )}
             <dl className={styles.reference}>
