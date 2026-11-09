@@ -19,7 +19,7 @@ export function BottomNav() {
 
   const links = [
     { href: "/", label: "Inicio", Icon: House },
-    { href: null, label: "Servicios", Icon: Layers },
+    { href: "/servicios", label: "Servicios", Icon: Layers },
     { href: "/movimientos", label: "Movimientos", Icon: List },
     { href: "/mas", label: "Más", Icon: LayoutGrid },
   ];

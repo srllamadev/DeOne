@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
-import type { ProfileId, Quote, QuoteRequest, Remittance, Wallet, WalletEntry } from "@deone/contracts";
+import type { ProfileId, Quote, QuoteRequest, Remittance, UtilityBill, UtilityId, Wallet, WalletEntry } from "@deone/contracts";
 import type { PayInProvider, PayOutProvider } from "../ramps/demo.js";
 import type { SettlementLeg, StellarRail } from "../stellar/rail.js";
 import { openingBalances, openingEntries, profiles } from "../wallet/profiles.js";
 import { minorToToken, route, RouteError } from "./rates.js";
+import { UTILITY_AMOUNTS, UTILITY_CATALOG } from "../services/utilities.js";
 
 export class RequestError extends Error {
   constructor(readonly status: number, readonly code: string, message: string) {
@@ -23,6 +24,8 @@ export class DemoRemittances {
   private readonly usedQuotes = new Set<string>();
   private readonly remittances = new Map<string, Remittance>();
   private readonly idempotency = new Map<string, Remittance>();
+  private readonly utilityPayments = new Map<string, string>();
+  private readonly utilityKeys = new Map<string, string>();
   private queue = Promise.resolve();
 
   constructor(
@@ -97,6 +100,47 @@ export class DemoRemittances {
     this.remittances.set(remittance.id, remittance);
     this.queue = this.queue.then(() => this.process(remittance));
     return remittance;
+  }
+
+  utilityBills(profile: ProfileId): UtilityBill[] {
+    const currency = profiles[profile].currency;
+    return UTILITY_CATALOG.map((utility) => {
+      const paidAt = this.utilityPayments.get(`${profile}:${utility.id}`);
+      return {
+        ...utility,
+        amountMinor: UTILITY_AMOUNTS[currency][utility.id],
+        currency,
+        paid: paidAt !== undefined,
+        paidAt,
+      };
+    });
+  }
+
+  payUtility(profile: ProfileId, billId: string, key: string): UtilityBill {
+    const bill = this.utilityBills(profile).find((candidate) => candidate.id === billId);
+    if (!bill) throw new RequestError(404, "NOT_FOUND", "No encontramos esa factura.");
+
+    const previousBill = this.utilityKeys.get(key);
+    if (previousBill !== undefined) {
+      if (previousBill !== `${profile}:${billId}`) throw new RequestError(409, "KEY_REUSED", "La clave ya pertenece a otra factura.");
+      return this.utilityBills(profile).find((candidate) => candidate.id === billId)!;
+    }
+    if (bill.paid) throw new RequestError(409, "ALREADY_PAID", "Esta factura ya está pagada.");
+    if (this.balances[profile] < bill.amountMinor) {
+      throw new RequestError(409, "INSUFFICIENT_BALANCE", "Saldo disponible insuficiente.");
+    }
+
+    const paidAt = new Date().toISOString();
+    this.balances[profile] -= bill.amountMinor;
+    this.utilityPayments.set(`${profile}:${billId}`, paidAt);
+    this.utilityKeys.set(key, `${profile}:${billId}`);
+    this.entries[profile].unshift({
+      id: randomUUID(),
+      label: `Pago de servicio · ${bill.name}`,
+      amountMinor: -bill.amountMinor,
+      createdAt: paidAt,
+    });
+    return { ...bill, paid: true, paidAt };
   }
 
   get(id: string): Remittance {

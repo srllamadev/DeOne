@@ -5,7 +5,6 @@ import { ChevronRight, Copy, Eye, EyeOff, QrCode, ScanLine, UserRound, Wallet as
 import Link from "next/link";
 import { useState } from "react";
 import { Money } from "../lib/money";
-import { StellarBalances } from "./stellar-balances";
 import { useWallet } from "./use-wallet";
 
 function MovementList({ wallet, all = false }: { wallet: Wallet; all?: boolean }) {
@@ -104,8 +103,6 @@ export function Dashboard() {
         </button>
 
       </div>
-
-      <StellarBalances />
 
       <section aria-labelledby="movements-title">
         <div className="section-title">

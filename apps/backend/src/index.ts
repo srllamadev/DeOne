@@ -54,6 +54,16 @@ app.get("/api/wallet", (req, res) => {
   res.json(service.wallet(profile(req)));
 });
 
+app.get("/api/services", (req, res) => {
+  res.json({ bills: service.utilityBills(profile(req)) });
+});
+
+app.post("/api/services/:id/pay", (req, res) => {
+  const key = req.get("Idempotency-Key");
+  if (!key || key.length > 100) throw new RequestError(400, "INVALID_CONFIRMATION", "Falta la clave de confirmación.");
+  res.json(service.payUtility(profile(req), req.params.id, key));
+});
+
 app.get("/api/stellar/wallet", async (req, res, next) => {
   try {
     res.json(await stellarWallet(profile(req)));

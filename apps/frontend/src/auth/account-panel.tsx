@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "../lib/api";
+import { StellarBalances } from "../wallet/stellar-balances";
 import { useWallet } from "../wallet/use-wallet";
 
 export function AccountPanel() {
@@ -26,6 +27,9 @@ export function AccountPanel() {
         {wallet && <p className="muted">Sesión iniciada como {wallet.profile.name} · {wallet.profile.currency}</p>}
         {walletError && <p role="alert" className="debit">{walletError}</p>}
         <button className="primary-button" disabled={busy} onClick={() => void logout()}>Cerrar sesión</button>
+      </div>
+      <div className="panel stack">
+        <StellarBalances />
       </div>
     </>
   );

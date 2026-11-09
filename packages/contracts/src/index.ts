@@ -79,3 +79,15 @@ export interface StellarWallet {
   balances: StellarBalance[];
   network: "testnet";
 }
+
+export type UtilityId = "water" | "electricity" | "gas";
+
+export interface UtilityBill {
+  id: UtilityId;
+  name: string;
+  provider: string;
+  amountMinor: number;
+  currency: Currency;
+  paid: boolean;
+  paidAt?: string;
+}

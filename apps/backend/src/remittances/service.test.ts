@@ -96,3 +96,25 @@ test("un fallo de desembolso deja la remesa en revisión sin acreditar al destin
   assert.equal(service.wallet("martha").availableMinor, marthaBefore);
   assert.equal(service.wallet("martha").entries.some((entry) => entry.remittanceId === remittance.id), false);
 });
+
+test("pagar un servicio descuenta una vez, reintenta sin cobrar y no paga dos veces", () => {
+  const service = new DemoRemittances(noopPayIn, recordingRail([]), okPayOut);
+  const before = service.wallet("lidia").availableMinor;
+
+  const bill = service.payUtility("lidia", "electricity", "pay-1");
+  assert.equal(bill.paid, true);
+  assert.equal(service.payUtility("lidia", "electricity", "pay-1").paid, true);
+  assert.equal(service.wallet("lidia").availableMinor, before - 12_000);
+  assert.equal(service.wallet("lidia").entries[0].label, "Pago de servicio · Luz");
+  assert.throws(() => service.payUtility("lidia", "electricity", "pay-2"), /ya está pagada/);
+  assert.throws(() => service.payUtility("lidia", "water", "pay-1"), /ya pertenece a otra factura/);
+});
+
+test("un servicio usa la moneda de la cuenta y no se paga sin saldo", () => {
+  const service = new DemoRemittances(noopPayIn, recordingRail([]), okPayOut);
+  assert.equal(service.utilityBills("martha")[0].currency, "COP");
+  assert.equal(service.utilityBills("martha")[0].amountMinor, 8_500_000);
+  const paid = service.payUtility("martha", "gas", "martha-gas");
+  assert.equal(paid.amountMinor, 6_000_000);
+  assert.equal(service.wallet("martha").availableMinor, 245_000_000 - 6_000_000);
+});
