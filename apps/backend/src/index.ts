@@ -1,4 +1,4 @@
-import type { ProfileId } from "@deone/contracts";
+import { API_ERROR_CODES, IDEMPOTENCY_KEY_HEADER, IDEMPOTENCY_KEY_MAX_LENGTH, type ProfileId } from "@deone/contracts";
 import express, { type ErrorRequestHandler, type Request } from "express";
 import { authenticate } from "./auth/users.js";
 import { createSession, endSession, SESSION_COOKIE, SESSION_TTL_MS, sessionProfile } from "./auth/sessions.js";
@@ -26,7 +26,7 @@ app.use(express.json({ limit: "8kb" }));
 
 function profile(req: Request): ProfileId {
   const id = sessionProfile(req.headers.cookie);
-  if (!id) throw new RequestError(401, "UNAUTHORIZED", "Inicia sesión para continuar.");
+  if (!id) throw new RequestError(401, API_ERROR_CODES.UNAUTHORIZED, "Inicia sesión para continuar.");
   return id;
 }
 
@@ -39,7 +39,7 @@ app.post("/api/auth/login", (req, res) => {
   const id = typeof username === "string" && typeof password === "string"
     ? authenticate(username.trim().toLowerCase(), password)
     : undefined;
-  if (!id) throw new RequestError(401, "INVALID_CREDENTIALS", "Usuario o contraseña incorrectos.");
+  if (!id) throw new RequestError(401, API_ERROR_CODES.INVALID_CREDENTIALS, "Usuario o contraseña incorrectos.");
   res
     .cookie(SESSION_COOKIE, createSession(id), { httpOnly: true, sameSite: "lax", path: "/", maxAge: SESSION_TTL_MS })
     .json(service.wallet(id));
@@ -65,16 +65,16 @@ app.get("/api/stellar/wallet", async (req, res, next) => {
 app.post("/api/quotes", (req, res) => {
   const { recipientAlias, sendAmountMinor } = req.body ?? {};
   if (typeof recipientAlias !== "string" || typeof sendAmountMinor !== "number") {
-    throw new RequestError(400, "INVALID_QUOTE", "Revisa el alias y el monto.");
+    throw new RequestError(400, API_ERROR_CODES.INVALID_QUOTE, "Revisa el alias y el monto.");
   }
   res.json(service.quote(profile(req), { recipientAlias: recipientAlias.trim().toLowerCase(), sendAmountMinor }));
 });
 
 app.post("/api/remittances", (req, res) => {
-  const key = req.get("Idempotency-Key");
+  const key = req.get(IDEMPOTENCY_KEY_HEADER);
   const quoteId = req.body?.quoteId;
-  if (!key || key.length > 100 || typeof quoteId !== "string") {
-    throw new RequestError(400, "INVALID_CONFIRMATION", "Faltan datos de la confirmación.");
+  if (!key || key.length > IDEMPOTENCY_KEY_MAX_LENGTH || typeof quoteId !== "string") {
+    throw new RequestError(400, API_ERROR_CODES.INVALID_CONFIRMATION, "Faltan datos de la confirmación.");
   }
   res.json(service.send(profile(req), quoteId, key));
 });
@@ -89,10 +89,10 @@ const handleError: ErrorRequestHandler = (error, _req, res, _next) => {
     return;
   }
   if (error instanceof SyntaxError && "status" in error && error.status === 400) {
-    res.status(400).json({ code: "INVALID_JSON", message: "El cuerpo debe ser JSON válido." });
+    res.status(400).json({ code: API_ERROR_CODES.INVALID_JSON, message: "El cuerpo debe ser JSON válido." });
     return;
   }
-  res.status(500).json({ code: "INTERNAL_ERROR", message: "No pudimos procesar la solicitud." });
+  res.status(500).json({ code: API_ERROR_CODES.INTERNAL_ERROR, message: "No pudimos procesar la solicitud." });
 };
 app.use(handleError);
 
