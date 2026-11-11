@@ -60,7 +60,7 @@ Para mover dinero real, hacen falta un proveedor que cobre BOB y entregue USDC e
 
 ## Arquitectura del MVP
 
-Un repositorio en TypeScript con **Next.js** y CSS con tokens para la web, **Express** para la API y un paquete de contratos compartidos. La arquitectura objetivo usa **PostgreSQL** para el estado y una tabla de trabajos, y un **worker Node.js** que consume los trabajos y llama a `PayInProvider`, `StellarRail` y `PayOutProvider`. En la base actual el proceso de la API ejecuta una cola en memoria. La demo selecciona entre dos perfiles ficticios mediante una cookie.
+Un repositorio en TypeScript con **Next.js** y CSS con tokens para la web, **Express** para la API y un paquete de contratos compartidos. La arquitectura objetivo usa **PostgreSQL** para el estado y una tabla de trabajos, y un **worker Node.js** que consume los trabajos y llama a `PayInProvider`, `StellarRail` y `PayOutProvider`. En la base actual el proceso de la API ejecuta una cola en memoria. El perfil activo sale de la sesión iniciada con `POST /api/auth/login`: la cookie httpOnly `deone_session` identifica a Lidia o a Martha. No hay selector de perfil por `POST /api/demo/profile`.
 
 ```mermaid
 flowchart LR
@@ -68,7 +68,7 @@ flowchart LR
     B --> C[(PostgreSQL)]
     C <--> D[Worker de remesas]
     D --> E[Cobro BOB simulado]
-    D --> F[Pago USDC · Stellar Testnet]
+    D --> F[Pago BOBT/COPT · Testnet demo]
     D --> G[Abono COP simulado]
 ```
 
@@ -76,26 +76,50 @@ flowchart LR
 
 1. Lidia abre **Pago**, elige a Martha por alias y escribe `Bs 10,00`. La cotización de demo muestra **Bs 0,50 de comisión incluida**, **$4.500 COP netos** y su vencimiento. Es una tarifa ficticia de prueba.
 2. Lidia confirma. La API reserva Bs 10 del saldo de prueba, crea la remesa y encola el cobro simulado en la misma transacción de base de datos. Al confirmarse el cobro simulado, la reserva se convierte en débito.
-3. El worker envía **1,20 USDC de prueba** desde una cuenta de liquidación precargada a una cuenta de destino de prueba. Usar un `Payment` clásico con `@stellar/stellar-sdk` y Horizon Testnet. Preparar ambas cuentas con XLM de Friendbot y trustlines al emisor de USDC de Testnet. Fondear la cuenta de liquidación con USDC de Circle. Guardar el hash y verificar el resultado en la red. [Stellar para desarrolladores](https://developers.stellar.org/) · [USDC en Stellar](https://www.circle.com/multi-chain-usdc/stellar) · [Faucet de Circle](https://faucet.circle.com/)
+3. Con `STELLAR_MODE=testnet`, el adaptador actual mueve activos propios de la demo, no USDC. La wallet del ordenante paga **BOBT** a la tesorería y la tesorería paga **COPT** a la wallet del destinatario. Para Bs 10,00 el cobro on-chain es `10.00` BOBT y el abono es `4500.00` COPT. El diseño anterior, que se mantiene para el piloto con anchors, envía **1,20 USDC de prueba** desde una cuenta de liquidación a una cuenta de destino, con trustline al emisor de USDC de Testnet y fondeo desde Circle. Ese tramo USDC no lo ejecuta el adaptador de BOBT/COPT. [Stellar para desarrolladores](https://developers.stellar.org/) · [USDC en Stellar](https://www.circle.com/multi-chain-usdc/stellar) · [Faucet de Circle](https://faucet.circle.com/)
 4. Tras confirmar el pago en Stellar, el adaptador de salida confirma el abono de demo. El worker acredita $4.500 COP en la cuenta ficticia de Martha, registra el movimiento y cierra la remesa en una sola transacción de base de datos. El pago on-chain es verificable en Testnet y el movimiento COP es una anotación de demo. En el piloto con Bre-B, el dinero llega a la cuenta bancaria asociada a la llave y la app refleja el desembolso en el historial.
 
-### Contrato para trabajar en paralelo desde el minuto 45
+### Contrato de la API
+
+Los tipos viven en [`packages/contracts/src/index.ts`](packages/contracts/src/index.ts). Los montos fiat van en unidades menores con escala 2: `1000` es Bs 10,00 y `450000` es $4.500 COP. La sesión y la cotización fijan titular, destinataria y montos en el servidor. El cuerpo de error es `{ code, message }`.
 
 | Operación | Contrato |
 | --- | --- |
-| `GET /api/wallet` | Devuelve perfil activo, moneda, saldo disponible de demo y últimos movimientos. |
-| `POST /api/quotes` | Recibe `recipientAlias` y `sendAmountMinor`. Devuelve la cotización con `id`, monto total BOB, comisión incluida, COP netos, `expiresAt` y `mode`. |
-| `POST /api/remittances` | Recibe `quoteId` y cabecera `Idempotency-Key`. Devuelve la remesa con `id` y `status`. Repetir la misma solicitud devuelve la remesa existente. Cada cotización se consume una vez. |
-| `GET /api/remittances/:id` | Devuelve estado, montos, etapas y `txHash` si existe. La UI consulta cada 2–3 segundos durante el envío y actualiza la wallet al completarse. |
-| `POST /api/demo/profile` | Recibe `{ id: "lidia" }` o `{ id: "martha" }`, guarda el perfil activo en la cookie de demo y devuelve su wallet. |
+| `GET /api/health` | Público. Devuelve `{ status: "ok", mode: "demo", stellarMode }`. |
+| `POST /api/auth/login` | Recibe `{ username, password }`. `user1` / `user1pass` abre a Lidia y `user2` / `user2pass` abre a Martha. Responde la `Wallet` y fija la cookie httpOnly `deone_session` (`SameSite=Lax`, 8 horas). |
+| `POST /api/auth/logout` | Cierra la sesión de la cookie y responde `{}`. |
+| `GET /api/wallet` | Requiere sesión. Devuelve perfil, moneda, `availableMinor` y movimientos. |
+| `GET /api/stellar/wallet` | Requiere sesión. Devuelve dirección, existencia de la cuenta, saldos y `network: "testnet"`. En Testnet los activos de la demo son **BOBT** y **COPT**. |
+| `POST /api/quotes` | Requiere sesión. Recibe `recipientAlias` y `sendAmountMinor`. Devuelve `id`, ordenante, destinataria, monto enviado, comisión incluida, monto neto, `expiresAt` (2 minutos) y `mode: "demo"`. El corredor vale en ambos sentidos. |
+| `POST /api/remittances` | Requiere sesión. Recibe `{ quoteId }` y la cabecera `Idempotency-Key` (1 a 100 caracteres). La web usa el `quoteId` como clave. Devuelve la remesa con `id`, `status`, `stellarMode`, `createdAt` y, cuando existen, `txHash` y `payoutTxHash`. |
+| `GET /api/remittances/:id` | Devuelve la misma remesa para el seguimiento. La UI consulta cada 2–3 segundos durante el envío. Esta lectura no exige sesión. |
 
-**Estados** `AWAITING_PAYIN → PAYIN_CONFIRMED → STELLAR_PENDING → STELLAR_CONFIRMED → PAYOUT_PENDING → COMPLETED`. Agregar `FAILED` para fallos definitivos sin fondos pendientes y `REVIEW_REQUIRED` si hay fondos en tránsito o resultado incierto. Una cotización vencida se rechaza antes de reservar saldo. `COMPLETED` requiere confirmación del adaptador de desembolso, incluso si el hash ya existe.
+**Idempotencia** La misma clave, el mismo ordenante y la misma cotización devuelven la remesa ya creada. La misma clave con otra cotización responde `KEY_REUSED`. La misma clave de otro usuario responde `SENDER_REQUIRED`. Cada cotización se consume una vez (`QUOTE_USED`). Una cotización vencida o desconocida responde `QUOTE_EXPIRED` y no reserva saldo.
 
-**Datos mínimos** `demo_accounts`, `quotes`, `remittances`, `wallet_entries` y `jobs`. Registrar hash, referencias de proveedor, estado y marcas de tiempo en la remesa. Usar enteros en unidades menores para fiat, por ejemplo `1000` para Bs 10,00 y `450000` para $4.500 COP con escala 2. Enviar USDC al SDK como string decimal. La sesión y la cotización determinan titular, destinataria y montos en el servidor.
+**Estados** `AWAITING_PAYIN → PAYIN_CONFIRMED → STELLAR_PENDING → STELLAR_CONFIRMED → PAYOUT_PENDING → COMPLETED`. `FAILED` es un fallo definitivo sin fondos pendientes. `REVIEW_REQUIRED` cubre fondos en tránsito o un resultado incierto. `COMPLETED` exige la confirmación del adaptador de desembolso, aunque el hash ya exista. `txHash` es el pago del ordenante a la tesorería. `payoutTxHash` es el pago de la tesorería al destinatario.
+
+| Código | HTTP | Cuándo |
+| --- | --- | --- |
+| `INVALID_JSON` | 400 | El cuerpo no es JSON. |
+| `INVALID_QUOTE` | 400 | Faltan `recipientAlias` o `sendAmountMinor`, o no tienen el tipo esperado. |
+| `INVALID_CONFIRMATION` | 400 | Faltan `quoteId` o `Idempotency-Key`, o la clave supera 100 caracteres. |
+| `INVALID_CREDENTIALS` | 401 | Usuario o contraseña incorrectos. |
+| `UNAUTHORIZED` | 401 | La operación exige sesión y no hay una vigente. |
+| `SENDER_REQUIRED` | 403 | La cotización, o la clave de idempotencia, pertenece a otro usuario. |
+| `UNSUPPORTED_ROUTE` | 422 | El alias no existe o la ruta no cambia de moneda. |
+| `INVALID_AMOUNT` | 422 | El monto queda fuera de rango. BOB: Bs 1,00 a Bs 100,00. COP: $5.000 a $100.000. |
+| `QUOTE_EXPIRED` | 409 | La cotización no existe o ya venció. |
+| `QUOTE_USED` | 409 | La cotización ya se confirmó. |
+| `KEY_REUSED` | 409 | La clave de idempotencia ya pertenece a otra cotización. |
+| `INSUFFICIENT_BALANCE` | 409 | El saldo disponible no cubre el envío. |
+| `NOT_FOUND` | 404 | No existe esa remesa. |
+| `INTERNAL_ERROR` | 500 | Fallo no clasificado. |
+
+**Datos mínimos** `demo_accounts`, `quotes`, `remittances`, `wallet_entries` y `jobs`. Registrar hash, referencias de proveedor, estado y marcas de tiempo en la remesa. El adaptador de demo envía **BOBT** o **COPT** al SDK como string decimal de dos posiciones (`10.00`, `4500.00`). El diseño de producción con **USDC** usa el mismo formato decimal, pero ese activo no circula en el adaptador actual.
 
 **Reintentos** Usar restricciones únicas para cotización consumida, clave de idempotencia por ordenante y movimiento por remesa y tipo. Reservar o acreditar saldo bajo transacción. El worker procesa un pago Stellar a la vez desde la cuenta de prueba. Persistir el XDR firmado con vencimiento y el hash antes de enviar. Si la respuesta es incierta, consultar el hash y reenviar el mismo XDR mientras sea válido. Si persiste la incertidumbre, enviar a revisión. Liberar una reserva si falla el cobro antes del débito. En el piloto, verificar firmas de webhooks y conciliar por identificador antes de reintentar un pago externo.
 
-**Entornos** Fiat simulado en ambos modos. `STELLAR_MODE=testnet` activa el pago en la red de pruebas y lee claves solo del servidor. Si se prueba VANK por separado, confirmar que su sandbox acepta el emisor configurado y usar la cuenta y el memo que devuelva el anchor para esa orden. [Datos de sandbox de VANK](https://vank.co/en/anchor-stellar)
+**Entornos** Fiat simulado en ambos modos. `STELLAR_MODE=testnet` mueve BOBT y COPT en la red de pruebas y lee las semillas solo del servidor. El diseño con USDC de Circle queda para el piloto con anchors, fuera de este adaptador. Si se prueba VANK por separado, confirmar que su sandbox acepta el emisor configurado y usar la cuenta y el memo que devuelva el anchor para esa orden. [Datos de sandbox de VANK](https://vank.co/en/anchor-stellar)
 
 ## UI web basada en las capturas
 
@@ -107,7 +131,7 @@ Usar el mismo componente para los dos perfiles, con bandera y formato local `es-
 | Encabezado y saldo | Marca DeOne, nombre, bandera, alias o número de cuenta ficticio copiable. Tarjeta con borde amarillo, saldo grande, botón para ocultarlo y etiqueta persistente **Modo demo**. |
 | Acciones | Tres botones amarillos como en las capturas. **Cobro** muestra el alias y permite copiarlo. **Pago** abre la remesa. **Retiro** se muestra deshabilitado con «Próximamente». |
 | Actividad | «Últimos movimientos» muestra concepto, fecha, monto y estado. «Ver todos» lleva a **Movimientos**. En el detalle aparecen el comprobante y, cuando existe, el enlace a Stellar Testnet. |
-| Navegación | **Inicio · Servicios · Movimientos · Más**. Inicio y Movimientos son funcionales. Más contiene el selector de perfil de demo. Servicios queda como acceso futuro. En móvil, barra inferior. En escritorio, la misma jerarquía en un contenedor centrado con espacio lateral. |
+| Navegación | **Inicio · Servicios · Movimientos · Más**. Inicio y Movimientos son funcionales. Más muestra la sesión activa y permite cerrarla. El cambio de perfil se hace con login y logout. Servicios queda como acceso futuro. En móvil, barra inferior. En escritorio, la misma jerarquía en un contenedor centrado con espacio lateral. |
 
 Pantallas imprescindibles `Inicio → Pago → Revisar cotización → Seguimiento/comprobante`, más historial y vista de Martha. Dejar para después el escáner de cámara, QR bancario real, pagos de servicios, retiro manual, registro abierto y corredores adicionales.
 
@@ -126,7 +150,7 @@ Pantallas imprescindibles `Inicio → Pago → Revisar cotización → Seguimien
 | Hora | Punto de control |
 | --- | --- |
 | **H0–H0:45** | Crear el esqueleto y cerrar contrato, fixture de Bs 10, estados y responsables de carpetas. Dev 1 y 2 empiezan con fixtures. Dev 4 fondea cuentas en paralelo. Dev 5 revisa el sandbox sin bloquear al equipo. |
-| **H0:45–H4** | Construir módulos en paralelo. Antes de H3 validar el primer pago en Testnet. Si falta acceso o compatibilidad fiat, seguir con ambos adaptadores simulados. Si falta USDC de Circle, probar con un activo propio de Testnet etiquetado como tal y conservar USDC como diseño de producción. |
+| **H0:45–H4** | Construir módulos en paralelo. Antes de H3 validar el primer pago en Testnet. Si falta acceso o compatibilidad fiat, seguir con ambos adaptadores simulados. La demo de Testnet ya usa los activos propios BOBT y COPT. USDC de Circle sigue siendo el diseño de producción y de los anchors. |
 | **H4–H7** | Unir la API, el worker y los adaptadores. Demostrar desde API el envío con hash, el débito BOB y el abono COP simulado. |
 | **H7–H9** | Conectar ambas vistas, probar recarga, cotización vencida, doble confirmación y fallo de payout posterior a Stellar. |
 | **H9–H10** | Desplegar y probar desde dos navegadores, revisar móvil y preparar datos frescos para la presentación. |

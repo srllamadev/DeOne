@@ -1,7 +1,7 @@
-import type { Currency, Profile } from "@deone/contracts";
+import { API_ERROR_CODES, type ApiErrorCode, type Currency, type Profile } from "@deone/contracts";
 
 export class RouteError extends Error {
-  constructor(readonly status: number, readonly code: string, message: string) {
+  constructor(readonly status: number, readonly code: ApiErrorCode, message: string) {
     super(message);
   }
 }
@@ -32,11 +32,11 @@ export interface Route {
 
 export function route(sender: Profile, recipient: Profile, sendAmountMinor: number): Route {
   if (sender.currency === recipient.currency) {
-    throw new RouteError(422, "UNSUPPORTED_ROUTE", "Elige un destinatario en otra moneda.");
+    throw new RouteError(422, API_ERROR_CODES.UNSUPPORTED_ROUTE, "Elige un destinatario en otra moneda.");
   }
   const limits = LIMITS[sender.currency];
   if (!Number.isSafeInteger(sendAmountMinor) || sendAmountMinor < limits.min || sendAmountMinor > limits.max) {
-    throw new RouteError(422, "INVALID_AMOUNT", `Ingresa un monto entre ${limits.label}.`);
+    throw new RouteError(422, API_ERROR_CODES.INVALID_AMOUNT, `Ingresa un monto entre ${limits.label}.`);
   }
 
   const feeMinor = FEE_MINOR[sender.currency];

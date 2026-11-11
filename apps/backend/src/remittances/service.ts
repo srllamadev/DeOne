@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
-import type { ProfileId, Quote, QuoteRequest, Remittance, Wallet, WalletEntry } from "@deone/contracts";
+import { API_ERROR_CODES, type ApiErrorCode, type ProfileId, type Quote, type QuoteRequest, type Remittance, type Wallet, type WalletEntry } from "@deone/contracts";
 import type { PayInProvider, PayOutProvider } from "../ramps/demo.js";
 import type { SettlementLeg, StellarRail } from "../stellar/rail.js";
 import { openingBalances, openingEntries, profiles } from "../wallet/profiles.js";
 import { minorToToken, route, RouteError } from "./rates.js";
 
 export class RequestError extends Error {
-  constructor(readonly status: number, readonly code: string, message: string) {
+  constructor(readonly status: number, readonly code: ApiErrorCode, message: string) {
     super(message);
   }
 }
@@ -39,7 +39,7 @@ export class DemoRemittances {
     const recipient = PROFILE_IDS
       .map((id) => profiles[id])
       .find((candidate) => candidate.id !== profile && candidate.alias === input.recipientAlias);
-    if (!recipient) throw new RequestError(422, "UNSUPPORTED_ROUTE", "No encontramos ese alias como destinatario.");
+    if (!recipient) throw new RequestError(422, API_ERROR_CODES.UNSUPPORTED_ROUTE, "No encontramos ese alias como destinatario.");
 
     let result;
     try {
@@ -66,21 +66,21 @@ export class DemoRemittances {
   send(profile: ProfileId, quoteId: string, key: string): Remittance {
     const previous = this.idempotency.get(key);
     if (previous) {
-      if (previous.quote.sender.id !== profile) throw new RequestError(403, "SENDER_REQUIRED", "Esta remesa pertenece a otro usuario.");
-      if (previous.quote.id !== quoteId) throw new RequestError(409, "KEY_REUSED", "La clave ya pertenece a otra cotización.");
+      if (previous.quote.sender.id !== profile) throw new RequestError(403, API_ERROR_CODES.SENDER_REQUIRED, "Esta remesa pertenece a otro usuario.");
+      if (previous.quote.id !== quoteId) throw new RequestError(409, API_ERROR_CODES.KEY_REUSED, "La clave ya pertenece a otra cotización.");
       return previous;
     }
 
     const quote = this.quotes.get(quoteId);
     if (quote && quote.sender.id !== profile) {
-      throw new RequestError(403, "SENDER_REQUIRED", "Esta cotización pertenece a otro usuario.");
+      throw new RequestError(403, API_ERROR_CODES.SENDER_REQUIRED, "Esta cotización pertenece a otro usuario.");
     }
     if (!quote || Date.parse(quote.expiresAt) <= Date.now()) {
-      throw new RequestError(409, "QUOTE_EXPIRED", "La cotización venció. Vuelve a cotizar.");
+      throw new RequestError(409, API_ERROR_CODES.QUOTE_EXPIRED, "La cotización venció. Vuelve a cotizar.");
     }
-    if (this.usedQuotes.has(quoteId)) throw new RequestError(409, "QUOTE_USED", "La cotización ya fue utilizada.");
+    if (this.usedQuotes.has(quoteId)) throw new RequestError(409, API_ERROR_CODES.QUOTE_USED, "La cotización ya fue utilizada.");
     if (this.balances[profile] < quote.sendAmountMinor) {
-      throw new RequestError(409, "INSUFFICIENT_BALANCE", "Saldo disponible insuficiente.");
+      throw new RequestError(409, API_ERROR_CODES.INSUFFICIENT_BALANCE, "Saldo disponible insuficiente.");
     }
 
     const remittance: Remittance = {
@@ -101,7 +101,7 @@ export class DemoRemittances {
 
   get(id: string): Remittance {
     const remittance = this.remittances.get(id);
-    if (!remittance) throw new RequestError(404, "NOT_FOUND", "No encontramos esta remesa.");
+    if (!remittance) throw new RequestError(404, API_ERROR_CODES.NOT_FOUND, "No encontramos esta remesa.");
     return remittance;
   }
 
